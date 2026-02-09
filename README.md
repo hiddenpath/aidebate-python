@@ -1,12 +1,13 @@
-# AI Debate (Python) v0.1.0
+# AI Debate (Python) v0.2.0
 
 **Multi-model AI debate arena built on [ai-lib-python](https://github.com/hiddenpath/ai-lib-python) and [ai-protocol](https://github.com/hiddenpath/ai-protocol).**
 
-Python port of [aidebate](https://github.com/hiddenpath/aidebate) (Rust). Three AI models engage in a structured debate: Pro and Con present arguments across four rounds, then a Judge delivers the verdict.
+Python port of [aidebate](https://github.com/hiddenpath/aidebate) (Rust). Three AI models engage in a structured debate: Pro and Con present arguments across four rounds, then a Judge delivers the verdict. Debaters can optionally search the web for evidence to support their arguments.
 
 ## Features
 
 - **4-Round Debate Flow**: Opening → Rebuttal → Defense → Closing → Judgement
+- **Web Search Tool Calling**: Debaters can search the web for evidence via Tavily API (optional)
 - **Dynamic Model Selection**: Choose any available model for each role via the UI
 - **Auto Provider Detection**: Automatically detects configured API keys and shows available models
 - **Multi-Provider Support**: DeepSeek, Zhipu GLM, Groq, Mistral, OpenAI, Anthropic, MiniMax
@@ -24,7 +25,22 @@ Python port of [aidebate](https://github.com/hiddenpath/aidebate) (Rust). Three 
 - **Protocol**: [ai-protocol](https://github.com/hiddenpath/ai-protocol)
 - **Database**: aiosqlite (async SQLite)
 - **Streaming**: Server-Sent Events (SSE) via StreamingResponse
+- **Tool Calling**: Function calling with web search via Tavily API
 - **Frontend**: Same as Rust version — Marked.js (CDN), dark theme
+
+## Tool Calling (Web Search)
+
+When `TAVILY_API_KEY` is set, debaters (Pro and Con) can call a `web_search` tool to find evidence:
+
+1. The model receives the debate context and a `web_search` tool definition
+2. If the model decides evidence would help, it calls `web_search` with a query
+3. The system executes the search via Tavily API and feeds results back
+4. The model generates its argument incorporating the search results
+5. Search activity is displayed in the UI with query and sources
+
+**Note**: The Judge does NOT use tools - it evaluates objectively based on the debate transcript only.
+
+If `TAVILY_API_KEY` is not set, the system works exactly as before (no tool calling, no behavior change).
 
 ## Default Model Configuration
 
@@ -49,6 +65,7 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 # Edit .env and add your API keys (at least one provider required)
+# Optionally add TAVILY_API_KEY for web search tool calling
 ```
 
 ### 3. Run
@@ -73,6 +90,9 @@ DEEPSEEK_API_KEY=sk-your-key
 GROQ_API_KEY=gsk_your-key      # generous free tier
 MISTRAL_API_KEY=your-key        # recommended as fallback
 
+# Optional: Web search for evidence-backed debates
+TAVILY_API_KEY=tvly-your-key
+
 # Optional: Override default models
 PRO_MODEL_ID=deepseek/deepseek-chat
 CON_MODEL_ID=zhipu/glm-4-plus
@@ -85,7 +105,7 @@ JUDGE_MODEL_ID=groq/llama-3.3-70b-versatile
 |--------|------|-------------|
 | GET | `/` | Main page |
 | GET | `/health` | Health check with model configuration |
-| GET | `/api/models` | Available providers and models (for UI) |
+| GET | `/api/models` | Available providers, models, and feature flags |
 | POST | `/debate/stream` | Start a debate, returns SSE stream |
 | GET | `/history` | Fetch debate history |
 
@@ -98,9 +118,10 @@ aidebate-python/
 │   ├── __main__.py        # Entry point (python -m aidebate)
 │   ├── app.py             # FastAPI application and routes
 │   ├── config.py          # Provider detection and client management
-│   ├── engine.py          # Debate engine with streaming
+│   ├── engine.py          # Debate engine with streaming + tool calling
 │   ├── prompts.py         # Prompt templates for debate roles
 │   ├── storage.py         # SQLite persistence
+│   ├── tools.py           # Web search tool (Tavily API)
 │   └── types.py           # Data types and enums
 ├── static/
 │   └── index.html         # Frontend (shared with Rust version)

@@ -17,8 +17,9 @@ from .config import (
     detect_available_providers,
     init_default_clients,
 )
-from .engine import execute_debate_round, execute_judge_round
+from .engine import execute_debate_round, execute_judge_round, execute_round_with_tools
 from .storage import fetch_history, init_db, save_message
+from .tools import is_search_enabled
 from .types import ClientInfo, DebatePhase, Position, TranscriptEntry
 
 logger = logging.getLogger("aidebate")
@@ -107,6 +108,9 @@ async def get_models():
             "pro": pro_default,
             "con": con_default,
             "judge": judge_default,
+        },
+        "features": {
+            "web_search": is_search_enabled(),
         },
     }
 
@@ -198,7 +202,15 @@ async def debate_stream(req: DebateRequest):
                 full_content = ""
                 error_occurred = False
 
-                async for chunk in execute_debate_round(client, side, phase, req.topic, transcript):
+                # Choose between tool-enabled and regular execution
+                search_enabled = is_search_enabled()
+                round_gen = (
+                    execute_round_with_tools(client, side, phase, req.topic, transcript)
+                    if search_enabled
+                    else execute_debate_round(client, side, phase, req.topic, transcript)
+                )
+
+                async for chunk in round_gen:
                     if chunk["type"] == "delta":
                         yield _sse_json({
                             "type": "delta",
@@ -223,6 +235,15 @@ async def debate_stream(req: DebateRequest):
                             "phase": phase.value,
                             "model": client.model_id,
                             "usage": chunk["usage"],
+                        })
+                    elif chunk["type"] == "search":
+                        yield _sse_json({
+                            "type": "search",
+                            "side": side.value,
+                            "phase": phase.value,
+                            "model": client.model_id,
+                            "query": chunk["query"],
+                            "results": chunk["results"],
                         })
                     elif chunk["type"] == "error":
                         yield _sse_json({"type": "error", "message": chunk["message"]})

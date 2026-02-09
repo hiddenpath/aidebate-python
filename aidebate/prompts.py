@@ -12,6 +12,31 @@ def build_side_prompt(
     transcript: list[TranscriptEntry],
 ) -> list[Message]:
     """Build the prompt messages for a debate side (Pro or Con)."""
+    return _build_side_prompt_inner(side, phase, topic, transcript, tools_enabled=False)
+
+
+def build_side_prompt_with_tools(
+    side: Position,
+    phase: DebatePhase,
+    topic: str,
+    transcript: list[TranscriptEntry],
+    search_context: str | None = None,
+) -> list[Message]:
+    """Build the prompt messages with tool calling enabled and optional search context."""
+    return _build_side_prompt_inner(
+        side, phase, topic, transcript,
+        tools_enabled=True, search_context=search_context,
+    )
+
+
+def _build_side_prompt_inner(
+    side: Position,
+    phase: DebatePhase,
+    topic: str,
+    transcript: list[TranscriptEntry],
+    tools_enabled: bool = False,
+    search_context: str | None = None,
+) -> list[Message]:
     stance = {
         Position.PRO: "你是正方，支持该议题。",
         Position.CON: "你是反方，反对该议题。",
@@ -29,6 +54,13 @@ def build_side_prompt(
     for entry in transcript:
         history += f"[{entry.position.label} - {entry.phase.title} - {entry.model_id}]\n{entry.content}\n\n"
 
+    tool_instruction = ""
+    if tools_enabled:
+        tool_instruction = (
+            "\n- 当需要事实、数据、统计或最新信息来支持论点时，请调用 web_search 工具搜索证据。\n"
+            "- 搜索结果要自然融入你的论点，不要提及工具调用过程。\n"
+        )
+
     system_content = (
         f"{stance}\n"
         f"议题：{topic}\n"
@@ -37,14 +69,20 @@ def build_side_prompt(
         f"- 用 Markdown 输出。\n"
         f"- 必须包含 `## Reasoning`（推理过程，精简列点）和 `## Final Position`（本轮结论）。\n"
         f"- 语言简洁有力，避免重复。\n"
-        f"- 字数建议 120-220 中文字。\n"
+        f"- 字数建议 120-220 中文字。{tool_instruction}\n"
     )
 
     messages = [Message.system(system_content)]
     if history:
         messages.append(Message.user(f"已进行的辩论记录：\n{history}"))
-    messages.append(Message.user(f"请完成本轮 `{phase.title}` 发言。"))
 
+    # Inject search results as reference context if available
+    if search_context:
+        messages.append(Message.user(
+            f"以下是搜索到的参考资料，请将相关内容自然地融入你的论点：\n\n{search_context}"
+        ))
+
+    messages.append(Message.user(f"请完成本轮 `{phase.title}` 发言。"))
     return messages
 
 
