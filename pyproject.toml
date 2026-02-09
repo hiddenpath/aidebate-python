@@ -1,0 +1,30 @@
+[project]
+name = "aidebate-python"
+version = "0.1.0"
+description = "AI Debate System - Multi-model AI debate arena (Python port)"
+readme = "README.md"
+license = {text = "MIT OR Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "AI-Protocol Team"},
+]
+keywords = ["ai", "debate", "llm", "multi-provider"]
+
+dependencies = [
+    "ai-lib-python @ git+https://github.com/hiddenpath/ai-lib-python.git@v0.5.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "aiosqlite>=0.19.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/hiddenpath/aidebate-python"
+Repository = "https://github.com/hiddenpath/aidebate-python"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["aidebate*"]
