@@ -3,6 +3,53 @@
 from ai_lib_python import Message
 
 from .types import DebatePhase, Position, TranscriptEntry
+from .config import TRANSCRIPT_MAX_ENTRIES, get_max_tokens_for_role, get_reserved_tokens_for_role
+
+
+def _estimate_tokens_from_text(text: str) -> int:
+    """Rough token estimate: assume ~1 token per 4 characters (heuristic)."""
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
+
+
+def _compress_transcript_for_role(transcript: list[TranscriptEntry], role: str, reserved_tokens: int | None = None) -> list[TranscriptEntry]:
+    """Trim the transcript so estimated tokens fit within the role's per-turn budget.
+
+    reserved_tokens: tokens reserved for system + reply content. The rest is available for history.
+    This function removes oldest entries first and, if needed, trims entry content.
+    """
+    if not transcript:
+        return transcript
+
+    if reserved_tokens is None:
+        reserved_tokens = get_reserved_tokens_for_role(role)
+
+    max_tokens = get_max_tokens_for_role(role)
+    allowed_history_tokens = max(0, max_tokens - reserved_tokens)
+
+    # Build recent-first and include entries until token budget exceeded
+    out: list[TranscriptEntry] = []
+    total = 0
+    for entry in reversed(transcript):
+        est = _estimate_tokens_from_text(entry.content)
+        if total + est > allowed_history_tokens and out:
+            break
+        out.append(entry)
+        total += est
+
+    out = list(reversed(out))
+
+    # If still empty (single entry too large), truncate the oldest entry content
+    if not out and transcript:
+        first = transcript[-1]
+        # estimate allowed chars from tokens
+        allowed_chars = max(80, allowed_history_tokens * 4)
+        truncated = first.content[:allowed_chars] + "\n\n[...已截断]"
+        new_entry = TranscriptEntry(position=first.position, phase=first.phase, model_id=first.model_id, content=truncated)
+        return [new_entry]
+
+    return out
 
 
 def build_side_prompt(
@@ -49,9 +96,15 @@ def _build_side_prompt_inner(
         DebatePhase.CLOSING: "总结陈词：总结关键论点，强调结论。",
     }.get(phase, "")
 
-    # Format transcript history
+    # Format transcript history (compress by token budget per-role)
     history = ""
-    for entry in transcript:
+    # compress transcript to fit token budget for this side
+    recent = _compress_transcript_for_role(transcript, role=side.name.lower()) if transcript else transcript
+    max_entries = TRANSCRIPT_MAX_ENTRIES if TRANSCRIPT_MAX_ENTRIES and TRANSCRIPT_MAX_ENTRIES > 0 else len(recent)
+    recent = recent[-max_entries:]
+    if len(transcript) > len(recent):
+        history += f"[...已截断，显示最近 {len(recent)} 条记录]\n\n"
+    for entry in recent:
         history += f"[{entry.position.label} - {entry.phase.title} - {entry.model_id}]\n{entry.content}\n\n"
 
     tool_instruction = ""
@@ -92,7 +145,11 @@ def build_judge_prompt(
 ) -> list[Message]:
     """Build the prompt messages for the judge."""
     history = ""
-    for entry in transcript:
+    max_entries = TRANSCRIPT_MAX_ENTRIES if TRANSCRIPT_MAX_ENTRIES and TRANSCRIPT_MAX_ENTRIES > 0 else len(transcript)
+    recent = transcript[-max_entries:]
+    if len(transcript) > max_entries:
+        history += f"[...已截断，显示最近 {max_entries} 条记录]\n\n"
+    for entry in recent:
         history += f"[{entry.position.label} - {entry.phase.title} - {entry.model_id}]\n{entry.content}\n\n"
 
     system_content = (

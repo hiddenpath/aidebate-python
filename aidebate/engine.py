@@ -4,6 +4,7 @@ import logging
 from typing import AsyncGenerator
 
 from .prompts import build_judge_prompt, build_side_prompt, build_side_prompt_with_tools
+from .config import get_max_tokens_for_role
 from .tools import SearchResult, execute_web_search, is_search_enabled, search_tool_definition
 from .types import ClientInfo, DebatePhase, Position, TranscriptEntry
 
@@ -33,7 +34,7 @@ async def execute_debate_round(
             client_info.client.chat()
             .messages(messages)
             .temperature(0.7)
-            .max_tokens(2048)
+            .max_tokens(get_max_tokens_for_role(side.value))
             .stream()
         ):
             chunk = _map_event(event)
@@ -73,7 +74,7 @@ async def execute_round_with_tools(
             .messages(messages)
             .tools(tool_defs)
             .temperature(0.7)
-            .max_tokens(2048)
+            .max_tokens(get_max_tokens_for_role(side.value))
             .execute()
         )
 
@@ -124,7 +125,7 @@ async def execute_round_with_tools(
             client_info.client.chat()
             .messages(messages_with_context)
             .temperature(0.7)
-            .max_tokens(2048)
+            .max_tokens(get_max_tokens_for_role(side.value))
             .stream()
         ):
             chunk = _map_event(event)
@@ -153,7 +154,7 @@ async def execute_judge_round(
             client_info.client.chat()
             .messages(messages)
             .temperature(0.3)
-            .max_tokens(1024)
+            .max_tokens(get_max_tokens_for_role("judge"))
             .stream()
         ):
             chunk = _map_event(event)

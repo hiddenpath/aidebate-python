@@ -93,6 +93,50 @@ def default_models() -> tuple[str, str, str]:
     return pro, con, judge
 
 
+# ---------------------------------------------------------------------------
+# Runtime token / history configuration (can be overridden via env vars)
+# ---------------------------------------------------------------------------
+# Max tokens per role (integers)
+PRO_MAX_TOKENS = int(os.environ.get("PRO_MAX_TOKENS", "2048"))
+CON_MAX_TOKENS = int(os.environ.get("CON_MAX_TOKENS", "2048"))
+JUDGE_MAX_TOKENS = int(os.environ.get("JUDGE_MAX_TOKENS", "3072"))
+
+# How many recent transcript entries to keep when building prompts
+TRANSCRIPT_MAX_ENTRIES = int(os.environ.get("TRANSCRIPT_MAX_ENTRIES", "12"))
+
+# Tokens reserved for system messages, tool context and reply overhead (can be tuned)
+TRANSCRIPT_RESERVED_TOKENS = int(os.environ.get("TRANSCRIPT_RESERVED_TOKENS", "512"))
+# Allow per-role overrides if needed
+PRO_RESERVED_TOKENS = int(os.environ.get("PRO_RESERVED_TOKENS", str(TRANSCRIPT_RESERVED_TOKENS)))
+CON_RESERVED_TOKENS = int(os.environ.get("CON_RESERVED_TOKENS", str(TRANSCRIPT_RESERVED_TOKENS)))
+JUDGE_RESERVED_TOKENS = int(os.environ.get("JUDGE_RESERVED_TOKENS", str(TRANSCRIPT_RESERVED_TOKENS)))
+
+
+def get_max_tokens_for_role(role: str) -> int:
+    """Return the configured max token count for a role: 'pro', 'con', or 'judge'."""
+    r = (role or "").lower()
+    if r == "pro":
+        return PRO_MAX_TOKENS
+    if r == "con":
+        return CON_MAX_TOKENS
+    if r == "judge" or r == "judgement" or r == "judgement":
+        return JUDGE_MAX_TOKENS
+    # Fallback
+    return int(os.environ.get("DEFAULT_MAX_TOKENS", "2048"))
+
+
+def get_reserved_tokens_for_role(role: str) -> int:
+    """Return reserved tokens for system + reply for a given role."""
+    r = (role or "").lower()
+    if r == "pro":
+        return PRO_RESERVED_TOKENS
+    if r == "con":
+        return CON_RESERVED_TOKENS
+    if r == "judge" or r == "judgement" or r == "judgement":
+        return JUDGE_RESERVED_TOKENS
+    return TRANSCRIPT_RESERVED_TOKENS
+
+
 def _mask_key(key: str) -> str:
     if len(key) > 4:
         return key[:4] + "..."
